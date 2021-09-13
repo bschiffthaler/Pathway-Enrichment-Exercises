@@ -8,18 +8,20 @@ suppressPackageStartupMessages({
   library(magrittr)
 })
 
-load(here("data/sn_nsm.RData"))
+load(here("data/res.RData"))
 
 #' Most GSEA packages work best if genes are annotated with entrez identifiers
 #' so we first use `AnnotationDbi` to convert our data.
-entrezid <- AnnotationDbi::select(org.Hs.eg.db, smokers$ID, "ENTREZID", "ENSEMBL")
-smokers_entrez <- left_join(smokers, entrezid, by = c("ID" = "ENSEMBL"))
+entrezid <- AnnotationDbi::select(org.Hs.eg.db, res$gene, "ENTREZID", "SYMBOL")
+res_entrez <- left_join(res, entrezid, by = c("gene" = "SYMBOL"))
 #' When converting it is often unavoidable to lost some data due to non 
 #' identical annotations
-smokers_entrez %<>% filter(!is.na(ENTREZID) & !duplicated(ENTREZID))
+res_entrez %<>% 
+  filter(!is.na(ENTREZID) & !duplicated(ENTREZID)) %>%
+  filter((!near(baseMean, 0)) & (!is.na(log2FoldChange)))
 
-deg <- smokers_entrez$logFC
-names(deg) <- smokers_entrez$ENTREZID
+deg <- res_entrez$log2FoldChange
+names(deg) <- res_entrez$ENTREZID
 
 #' Now let's run the SPIA algorithm. Two big caveats: firstly, if we didn't
 #' create an up-to-date datastructure for the KEGG annotation, this will use

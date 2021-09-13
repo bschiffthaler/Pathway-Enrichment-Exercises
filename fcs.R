@@ -11,40 +11,45 @@ suppressPackageStartupMessages({
   library(here)
 })
 
-load(here("data/sn_nsm.RData"))
+
+load(here("data/res.RData"))
 
 #' Most GSEA packages work best if genes are annotated with entrez identifiers
 #' so we first use `AnnotationDbi` to convert our data.
-entrezid <- AnnotationDbi::select(org.Hs.eg.db, smokers$ID, "ENTREZID", "ENSEMBL")
-smokers_entrez <- left_join(smokers, entrezid, by = c("ID" = "ENSEMBL"))
+entrezid <- AnnotationDbi::select(org.Hs.eg.db, res$gene, "ENTREZID", "SYMBOL")
+res_entrez <- left_join(res, entrezid, by = c("gene" = "SYMBOL"))
 #' When converting it is often unavoidable to lost some data due to non 
 #' identical annotations
-smokers_entrez %<>% filter(!is.na(ENTREZID) & !duplicated(ENTREZID))
+res_entrez %<>% 
+  filter(!is.na(ENTREZID) & !duplicated(ENTREZID)) %>%
+  filter((!near(baseMean, 0)) & (!is.na(log2FoldChange)))
+
 
 #' Next, let's extract the feature of interest, in this case the log fold
 #' change
-scores_smokers <- smokers_entrez$logFC 
-names(scores_smokers) <- smokers_entrez$ENTREZID
+scores <- res_entrez$log2FoldChange 
+names(scores) <- res_entrez$ENTREZID
 
 #' We can next use `AnnotationDbi` again to create a list of all KEGG 
 #' pathways and which genes are represented within them. This will be needed
 #' for the next step
 pathways <- AnnotationDbi::select(
-  org.Hs.eg.db, names(scores_smokers),
+  org.Hs.eg.db, names(scores),
   "PATH", "ENTREZID"
 ) %>% as_tibble() %>%
   filter(!is.na(PATH))
 pathways <- split(pathways$ENTREZID, pathways$PATH)
 
 #' Finally, we can test using `fgsea`
-fgsea_res <- fgsea(pathways = pathways, stats = scores_smokers, eps = 0, nproc = 4)
+fgsea_res <- fgsea(pathways = pathways, stats = scores, eps = 0, nproc = 4)
 fgsea_res <- arrange(fgsea_res, padj)
+head(fgsea_res)
 
 #' `fgsea` has some modest visualization features. Here we plot the leading
 #' edge of the most significant pathway (Cell Cycle: has04110)
 
 #+ fig.width=10, fig.height=6
-plotEnrichment(pathways[[fgsea_res$pathway[1]]], scores_smokers) +
+plotEnrichment(pathways[[fgsea_res$pathway[1]]], scores) +
   labs(title = fgsea_res$pathway[1])
 
 #' First we select the top 10 most up and downregulated pathways. We also reverse
@@ -78,27 +83,27 @@ names(pathways_trans) <- top_pathways$pathway
 #+ fig.width=10, fig.height=6
 plot.new()
 plotGseaTable(
-  pathways_trans[top_pathways$pathway], scores_smokers, top_pathways, 
+  pathways_trans[top_pathways$pathway], scores, top_pathways, 
   gseaParam=0.5
 )
 
 #' If we want detailed info on a pathway, we can make use of the pathview
-#' package. Let's zoom in on the Cell Cycle (04110) pathway.
-pathview(gene.data = scores_smokers, pathway.id = "04110",
+#' package. Let's zoom in on the p53 (04115) pathway.
+pathview(gene.data = scores, pathway.id = "04115",
          low = list("gene" = "skyblue"),
          mid = list(gene = "white"),
          high = list("gene" = "firebrick"))
 
 
-img <- image_read(here("hsa04110.pathview.png"))
+img <- image_read(here("hsa04115.pathview.png"))
 #+ fig.width=10, fig.height=6
 img
 
 #' The fgsea package allows us also to quickly get Reactome annotations for
 #' our gene list and test those
-r_pathways <- reactomePathways(names(scores_smokers))
+r_pathways <- reactomePathways(names(scores))
 r_fgsea_res <- fgsea(
-  pathways = r_pathways, stats = scores_smokers, eps = 0, nproc = 4
+  pathways = r_pathways, stats = scores, eps = 0, nproc = 4
 )
 r_fgsea_res <- arrange(r_fgsea_res, padj)
 #' We can again plot the leading edge
@@ -110,19 +115,19 @@ r_top_pathways <- rbind(r_top_pathways_up, r_top_pathways_down)
 #+ fig.width=10, fig.height=6
 plot.new()
 plotGseaTable(
-  r_pathways[r_top_pathways$pathway], scores_smokers, r_fgsea_res, 
+  r_pathways[r_top_pathways$pathway], scores, r_fgsea_res, 
   gseaParam=0.5
 )
 
 #' If there is a lot of undesired redundancy in the results, `fgsea` offers
 #' functionality to focus on main pathways only
 collapsed_pathways <- collapsePathways(r_fgsea_res[order(pval)][padj < 0.01], 
-                                       r_pathways, scores_smokers)
+                                       r_pathways, scores)
 main_pathways <- r_fgsea_res[pathway %in% collapsed_pathways$mainPathways][
   order(-NES), pathway]
 
 #+ fig.width=10, fig.height=6
 plot.new()
 plotGseaTable(
-  r_pathways[main_pathways], scores_smokers, r_fgsea_res, gseaParam=0.5
+  r_pathways[main_pathways], scores, r_fgsea_res, gseaParam=0.5
 )
