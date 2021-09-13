@@ -1,7 +1,7 @@
 library(DESeq2)
 library(here)
 
-#https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE159151
+#https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE177054
 
 dir.create(here("tmp"))
 
