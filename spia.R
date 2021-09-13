@@ -1,4 +1,5 @@
 options(warn = -1)
+options(connectionObserver = NULL)
 
 suppressPackageStartupMessages({
   library(org.Hs.eg.db)
